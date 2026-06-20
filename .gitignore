@@ -1,0 +1,7 @@
+uploads/
+__pycache__/
+*.pyc
+*.xlsx
+.env
+.env.*
+config.local.js

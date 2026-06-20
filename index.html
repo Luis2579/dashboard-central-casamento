@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#52634b">
+  <title>Dashboard Central de Casamento</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <button class="brand" data-view="home" aria-label="Ir para a central">
+        <img class="brand-logo" src="assets/logo-central-casamento.jpeg" alt="Monograma de Luís Francisco e Maria Júlia">
+        <span><strong>Dashboard</strong><small>Central de casamento</small></span>
+      </button>
+      <nav id="mainNav" class="main-nav"></nav>
+      <div class="sidebar-footer">
+        <button class="sidebar-link" id="exportAll">Exportar todos os dados</button>
+        <button class="sidebar-link" id="importBackup">Importar backup</button>
+        <button class="sidebar-link" id="restoreExample">Restaurar exemplo completo</button>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <button class="mobile-menu" id="mobileMenu" aria-label="Abrir menu">☰</button>
+        <button class="sidebar-toggle" id="sidebarToggle" aria-label="Ocultar barra lateral" title="Ocultar barra lateral">☰</button>
+        <div class="page-identity">
+          <div class="breadcrumb"><button data-view="home">Central</button><span>/</span><span id="crumbCurrent">Visão geral</span></div>
+          <h1 id="pageTitle">Central do casamento</h1>
+        </div>
+        <div class="global-tools">
+          <button class="account-button" id="accountButton" title="Conta e sincronização"><span class="cloud-dot"></span><span id="accountLabel">Modo local</span></button>
+          <button class="theme-toggle" id="themeToggle" title="Alternar tema" aria-label="Alternar tema">◐</button>
+          <label class="global-search"><span>⌕</span><input id="globalSearch" placeholder="Buscar em todo o casamento"></label>
+          <div class="quick-menu">
+            <button class="button primary" id="quickAdd">+ Novo</button>
+            <div class="quick-popover" id="quickPopover">
+              <button data-action="new-payment">Pagamento</button>
+              <button data-action="new-supplier">Fornecedor</button>
+              <button data-action="new-guest">Convidado</button>
+              <button data-action="new-task">Tarefa</button>
+              <button data-action="new-contract">Contrato / documento</button>
+              <button data-action="new-timeline">Evento no cronograma</button>
+              <button data-action="new-buffet">Item de buffet / bebida</button>
+              <button data-action="new-plan" data-module="Música">Música</button>
+              <button data-action="new-gift">Presente</button>
+              <button data-action="new-decor">Decisão visual</button>
+              <button data-action="new-table">Mesa</button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div id="alertStrip" class="alert-strip"></div>
+      <section id="viewRoot" class="view-root"></section>
+    </main>
+  </div>
+
+  <dialog id="entityDialog">
+    <form id="entityForm" class="dialog-form">
+      <div class="dialog-heading">
+        <div><span class="eyebrow" id="dialogEyebrow">Cadastro</span><h2 id="dialogTitle">Novo item</h2></div>
+        <button type="button" class="close-button" data-close-dialog="entityDialog">×</button>
+      </div>
+      <input type="hidden" name="_id">
+      <div id="formFields" class="form-grid"></div>
+      <div id="formNote" class="dialog-note"></div>
+      <div class="dialog-actions">
+        <button type="button" class="button secondary" data-close-dialog="entityDialog">Cancelar</button>
+        <button type="submit" class="button primary">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="categoryDialog">
+    <div class="dialog-form">
+      <div class="dialog-heading">
+        <div><span class="eyebrow">Personalização</span><h2>Categorias financeiras</h2></div>
+        <button type="button" class="close-button" data-close-dialog="categoryDialog">×</button>
+      </div>
+      <form id="categoryForm" class="inline-form">
+        <label><span>Nova categoria</span><input name="category" required placeholder="Ex.: Transporte dos convidados"></label>
+        <button class="button primary">Adicionar</button>
+      </form>
+      <div id="categoryList" class="category-list"></div>
+      <div class="dialog-note">Categorias em uso ficam protegidas contra exclusão.</div>
+      <div class="dialog-actions"><button type="button" class="button secondary" data-close-dialog="categoryDialog">Fechar</button></div>
+    </div>
+  </dialog>
+
+  <dialog id="importDialog">
+    <div class="dialog-form import-dialog">
+      <div class="dialog-heading">
+        <div><span class="eyebrow">Importação local</span><h2 id="importTitle">Importar registros</h2></div>
+        <button type="button" class="close-button" data-close-dialog="importDialog">×</button>
+      </div>
+      <div id="importSummary" class="import-summary"></div>
+      <div class="table-card import-preview"><table><thead id="importPreviewHead"></thead><tbody id="importPreviewBody"></tbody></table></div>
+      <div class="dialog-note" id="importNote">A importação acrescenta registros e ignora duplicados. Nenhum dado atual é substituído.</div>
+      <div class="dialog-actions">
+        <button type="button" class="button secondary" data-close-dialog="importDialog">Cancelar</button>
+        <button type="button" class="button primary" id="confirmImport">Importar registros</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="searchDialog">
+    <div class="dialog-form search-dialog">
+      <div class="dialog-heading">
+        <div><span class="eyebrow">Busca global</span><h2>Resultados</h2></div>
+        <button type="button" class="close-button" data-close-dialog="searchDialog">×</button>
+      </div>
+      <div id="searchResults" class="search-results"></div>
+    </div>
+  </dialog>
+
+  <dialog id="exportDialog">
+    <div class="dialog-form">
+      <div class="dialog-heading">
+        <div><span class="eyebrow">Central de exportações</span><h2>Exportar dados</h2></div>
+        <button type="button" class="close-button" data-close-dialog="exportDialog">×</button>
+      </div>
+      <div class="export-grid">
+        <button class="export-option" data-action="export-backup"><strong>Backup completo</strong><span>Todos os dados em JSON</span></button>
+        <button class="export-option" data-action="export-guests"><strong>Lista de convidados</strong><span>CSV estruturado</span></button>
+        <button class="export-option" data-action="export-finance"><strong>Pagamentos</strong><span>CSV financeiro</span></button>
+        <button class="export-option" data-action="export-suppliers"><strong>Fornecedores</strong><span>CSV com contatos e contratos</span></button>
+        <button class="export-option" data-action="export-summary-pdf"><strong>Resumo geral</strong><span>Impressão ou PDF</span></button>
+        <button class="export-option" data-action="export-timeline-pdf"><strong>Cronograma do dia</strong><span>Impressão ou PDF</span></button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="restoreDialog">
+    <div class="dialog-form">
+      <div class="dialog-heading">
+        <div><span class="eyebrow">Restauração segura</span><h2>Exemplo completo</h2></div>
+        <button type="button" class="close-button" data-close-dialog="restoreDialog">×</button>
+      </div>
+      <p class="restore-copy">Escolha como usar o exemplo. Mesclar preserva seus registros atuais; substituir exige confirmação final.</p>
+      <div class="export-grid">
+        <button class="export-option" data-action="export-backup"><strong>Exportar backup antes</strong><span>Recomendado antes de qualquer restauração</span></button>
+        <button class="export-option" data-action="merge-example"><strong>Mesclar exemplo</strong><span>Adiciona apenas registros ainda inexistentes</span></button>
+        <button class="export-option danger-option" data-action="replace-example"><strong>Substituir pelos exemplos</strong><span>Remove os dados atuais após confirmação</span></button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="authDialog">
+    <form id="authForm" class="dialog-form auth-form">
+      <div class="dialog-heading">
+        <div><span class="eyebrow">Acesso seguro</span><h2>Entrar no dashboard</h2></div>
+        <button type="button" class="close-button" data-close-dialog="authDialog">×</button>
+      </div>
+      <p class="restore-copy">Ao entrar, os dados deste navegador são sincronizados com sua conta e os documentos passam a ser salvos no Supabase.</p>
+      <label><span>E-mail</span><input name="email" type="email" autocomplete="email" required></label>
+      <label><span>Senha</span><input name="password" type="password" autocomplete="current-password" minlength="6" required></label>
+      <div id="authMessage" class="dialog-note" hidden></div>
+      <div class="dialog-actions">
+        <button type="button" class="button secondary" id="signUpButton">Criar conta</button>
+        <button type="submit" class="button primary">Entrar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <input id="importFile" type="file" accept=".xlsx,.csv" hidden>
+  <input id="moduleImportFile" type="file" accept=".xlsx,.csv,.json" hidden>
+  <input id="backupFile" type="file" accept=".json" hidden>
+  <div id="chartTooltip" class="chart-tooltip" role="tooltip"></div>
+  <div id="toast" class="toast" role="status"></div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="config.js"></script>
+  <script src="cloud.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
