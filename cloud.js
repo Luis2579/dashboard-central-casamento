@@ -22,7 +22,12 @@
     },
     async signUp(email, password) {
       if (!client) throw new Error("Configure o Supabase em config.js.");
-      const { data, error } = await client.auth.signUp({ email, password });
+      const emailRedirectTo = config.appUrl || new URL("./", window.location.href).href;
+      const { data, error } = await client.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo }
+      });
       if (error) throw error;
       return data;
     },
