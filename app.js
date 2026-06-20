@@ -441,7 +441,11 @@ async function submitEntity(form){
   for(const [name,,type] of config.fields){if(type==="number")data[name]=Number(data[name]||0);if(type==="boolean")data[name]=data[name]==="true";if(type==="tags")data[name]=parseTags(data[name])}
   if(currentEntity==="payment"){data.paid=data.paid==="true"||data.paid===true;if(data.paid&&!data.paidDate)data.paidDate=TODAY();if(!data.paid)data.paidDate="";if(!data.category)data.category=supplier(data.supplierId)?.category||"Outros"}
   if(currentEntity==="guest")data.confirmed=data.inviteStatus==="Confirmado";
-  if(currentEntity==="contract"&&typeof File!=="undefined"&&file instanceof File&&file.size){const uploaded=await uploadDocument(file);data.documentUrl=uploaded.url||"";data.documentPath=uploaded.path||"";data.documentName=uploaded.name}
+  if(currentEntity==="contract"&&typeof File!=="undefined"&&file instanceof File&&file.size){
+    const previous=currentEditId?state.contracts.find(c=>c.id===currentEditId):null,uploaded=await uploadDocument(file);
+    data.documentUrl=uploaded.url||"";data.documentPath=uploaded.path||"";data.documentName=uploaded.name;
+    if(previous?.documentPath&&previous.documentPath!==data.documentPath)window.CloudStore.deleteDocument(previous.documentPath).catch(()=>{});
+  }
   if(currentEditId){const index=state[collection].findIndex(x=>x.id===currentEditId);state[collection][index]={...state[collection][index],...data}}
   else state[collection].push({id:uid(currentEntity[0]),...data});
   $("#entityDialog").close();save(`${config.title} salvo.`);
@@ -534,7 +538,7 @@ document.addEventListener("click",async event=>{
   const supplierToggle=event.target.closest("[data-supplier-toggle]");if(supplierToggle){const row=document.querySelector(`[data-supplier-detail="${supplierToggle.dataset.supplierToggle}"]`);if(row){row.hidden=!row.hidden;supplierToggle.textContent=row.hidden?"Ficha":"Fechar"}return}
   const viewMode=event.target.closest("[data-view-mode]");if(viewMode){state.settings.viewMode=viewMode.dataset.viewMode;save("Modo de visualização atualizado.","Central","Preferência");return}
   const edit=event.target.closest("[data-edit]");if(edit){const [type,id]=edit.dataset.edit.split(":");openForm(type,id);return}
-  const del=event.target.closest("[data-delete]");if(del){const [type,id]=del.dataset.delete.split(":"),collection=COLLECTIONS[type];if(confirm("Excluir este registro?")){if(type==="supplier"&&state.payments.some(p=>p.supplierId===id)){toast("Fornecedor possui pagamentos e não pode ser excluído.");return}state[collection]=state[collection].filter(x=>x.id!==id);save("Registro excluído.")}return}
+  const del=event.target.closest("[data-delete]");if(del){const [type,id]=del.dataset.delete.split(":"),collection=COLLECTIONS[type];if(confirm("Excluir este registro?")){if(type==="supplier"&&state.payments.some(p=>p.supplierId===id)){toast("Fornecedor possui pagamentos e não pode ser excluído.");return}if(type==="contract"){const record=state.contracts.find(x=>x.id===id);if(record?.documentPath)try{await window.CloudStore.deleteDocument(record.documentPath)}catch(error){toast(`Não foi possível excluir o arquivo: ${error.message}`);return}}state[collection]=state[collection].filter(x=>x.id!==id);save("Registro excluído.")}return}
   const mark=event.target.closest("[data-mark-paid]");if(mark){const p=state.payments.find(x=>x.id===mark.dataset.markPaid);p.paid=true;p.paidDate=TODAY();save("Pagamento marcado como pago.");return}
   const rsvp=event.target.closest("[data-rsvp]");if(rsvp){const [id,value]=rsvp.dataset.rsvp.split(":"),g=state.guests.find(x=>x.id===id);g.inviteStatus=value;g.confirmed=value==="Confirmado";save("RSVP atualizado.");return}
   const toggle=event.target.closest("[data-task-toggle]");if(toggle){const t=state.tasks.find(x=>x.id===toggle.dataset.taskToggle);t.status=toggle.checked?"Concluída":"Pendente";save("Tarefa atualizada.");return}
@@ -609,21 +613,18 @@ document.addEventListener("click",event=>{if(event.target.closest("#reportImport
 function updateAccount(session){
   const button=$("#accountButton"),label=$("#accountLabel");
   button.classList.toggle("online",Boolean(session));
-  label.textContent=session?session.user.email:"Modo local";
+  label.textContent=session?"Online compartilhado":"Conectando...";
 }
 async function initializeCloud(){
   if(!window.CloudStore?.configured){updateAccount(null);return}
   try{
-    const session=await window.CloudStore.session();updateAccount(session);
-    if(session){
-      const remote=await window.CloudStore.load();
-      if(remote){mergeBackup(remote);localStorage.setItem(STORAGE_KEY,JSON.stringify(state));render()}
-      else await window.CloudStore.save(state);
-    }
-    window.CloudStore.onAuthChange(async session=>{updateAccount(session);if(session){const remote=await window.CloudStore.load();if(remote)mergeBackup(remote);await window.CloudStore.save(state);render()}});
+    const session=await window.CloudStore.ensureSession();updateAccount(session);
+    const remote=await window.CloudStore.load();
+    if(remote){mergeBackup(remote);localStorage.setItem(STORAGE_KEY,JSON.stringify(state));render()}
+    await window.CloudStore.save(state);
+    window.CloudStore.subscribe(remoteState=>{if(!remoteState)return;state=migrateState(remoteState);localStorage.setItem(STORAGE_KEY,JSON.stringify(state));render()});
   }catch(error){toast(`Nuvem indisponível: ${error.message}`)}
 }
-$("#accountButton").addEventListener("click",async()=>{const session=await window.CloudStore?.session?.();if(session){if(confirm(`Sair da conta ${session.user.email}?`)){await window.CloudStore.signOut();updateAccount(null);toast("Sessão encerrada. Os dados locais foram mantidos.")}}else if(!window.CloudStore?.configured){toast("Preencha as credenciais do Supabase em config.js.")}else $("#authDialog").showModal()});
 $("#authForm").addEventListener("submit",async event=>{event.preventDefault();const data=new FormData(event.currentTarget),message=$("#authMessage");try{message.hidden=true;await window.CloudStore.signIn(data.get("email"),data.get("password"));$("#authDialog").close();event.currentTarget.reset();toast("Login realizado. Sincronizando dados...")}catch(error){message.textContent=error.message;message.hidden=false}});
 $("#signUpButton").addEventListener("click",async()=>{const form=$("#authForm"),data=new FormData(form),message=$("#authMessage");try{if(!data.get("email")||!data.get("password"))throw new Error("Informe e-mail e senha para criar a conta.");await window.CloudStore.signUp(data.get("email"),data.get("password"));message.textContent="Conta criada. Verifique seu e-mail para confirmar o acesso.";message.hidden=false}catch(error){message.textContent=error.message;message.hidden=false}});
 

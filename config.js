@@ -2,5 +2,6 @@ window.APP_CONFIG = {
   supabaseUrl: "https://vcodocawarypewigxegg.supabase.co",
   supabasePublishableKey: "sb_publishable_3n5P9yYPgsCci_XejbV5Hw_61mgtWAM",
   storageBucket: "wedding-documents",
-  appUrl: "https://luis2579.github.io/dashboard-central-casamento/"
+  appUrl: "https://luis2579.github.io/dashboard-central-casamento/",
+  workspaceId: "casamento-luis-francisco-maria-julia"
 };
