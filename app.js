@@ -1,6 +1,8 @@
 const STORAGE_KEY = "votos-valores-v1";
 const APP_VERSION = 6;
-const COLORS = ["#52634b","#c7a75b","#b86e62","#7c9081","#d4bd86","#8a7667","#9eaa95","#d18d7d","#637a75","#b3a590"];
+const COLORS = ["#52634b","#c7a75b","#b86e62","#6f8f87","#9a7b67","#879c78","#d09a72","#73839a","#a98698","#b7a65d","#54736d","#d1b77a","#9d6059","#718665","#846f8c","#b78368","#657b91","#9b8d70","#70958e","#c18482"];
+const MONTHLY_WINDOW = 10;
+let monthlyWindowStart = 0;
 const DEFAULT_CATEGORIES = ["Espaço e recepção","Buffet e bebidas","Foto e vídeo","Decoração","Música","Trajes e beleza","Papelaria","Cerimonial","Lua de mel","Outros"];
 const TODAY = () => new Date().toISOString().slice(0,10);
 const uid = prefix => `${prefix}${Date.now()}${Math.random().toString(16).slice(2)}`;
@@ -286,7 +288,7 @@ function renderFinance(){
   const t=financialTotals(),ratio=state.settings.budget?t.contracted/state.settings.budget:0;
   const rows=financeRows().sort((a,b)=>a.dueDate.localeCompare(b.dueDate));
   return `<div class="metric-grid">${metric("Orçamento",money(state.settings.budget),"Planejado","gold")}${metric("Contratado",money(t.contracted),`${(ratio*100).toFixed(1)}% comprometido`,ratio>1?"rose":"")}${metric("Já pago",money(t.paid),`${t.contracted?(t.paid/t.contracted*100).toFixed(1):0}% dos contratos`)}${metric("Em aberto",money(t.pending),"Pagamentos lançados","gold")}${metric("Vencido",money(t.overdue),"Requer atenção",t.overdue?"rose":"")}</div>
-  <div class="content-grid finance-charts"><article class="panel"><div class="panel-heading"><div><span class="eyebrow">Evolução</span><h2>Previsto e pago por mês</h2></div></div><div class="chart" data-chart="monthly"></div></article><article class="panel"><div class="panel-heading"><div><span class="eyebrow">Status</span><h2>Composição dos pagamentos</h2></div></div><div class="donut-layout"><div class="chart" data-chart="payment-status"></div><div class="legend" data-legend="payment-status"></div></div></article><article class="panel"><div class="panel-heading"><div><span class="eyebrow">Categorias</span><h2>Valor contratado</h2></div></div><div class="donut-layout"><div class="chart" data-chart="finance-categories"></div><div class="legend" data-legend="finance-categories"></div></div></article><article class="panel"><div class="panel-heading"><div><span class="eyebrow">Meios de pagamento</span><h2>Distribuição programada</h2></div></div><div class="chart" data-chart="payment-methods"></div></article></div>
+  <div class="content-grid finance-charts"><article class="panel"><div class="panel-heading"><div><span class="eyebrow">Evolução</span><h2>Previsto e pago por mês</h2></div></div><div class="chart" data-chart="monthly"></div><div class="month-navigator"><button type="button" data-month-step="-1" aria-label="Meses anteriores">‹</button><input id="monthlyRange" type="range" min="0" value="0" aria-label="Período exibido no gráfico"><button type="button" data-month-step="1" aria-label="Próximos meses">›</button><span id="monthlyRangeLabel"></span></div></article><article class="panel"><div class="panel-heading"><div><span class="eyebrow">Status</span><h2>Composição dos pagamentos</h2></div></div><div class="donut-layout"><div class="chart" data-chart="payment-status"></div><div class="legend" data-legend="payment-status"></div></div></article><article class="panel"><div class="panel-heading"><div><span class="eyebrow">Categorias</span><h2>Valor contratado</h2></div></div><div class="donut-layout"><div class="chart" data-chart="finance-categories"></div><div class="legend" data-legend="finance-categories"></div></div></article><article class="panel"><div class="panel-heading"><div><span class="eyebrow">Meios de pagamento</span><h2>Distribuição programada</h2></div></div><div class="chart" data-chart="payment-methods"></div></article></div>
   <div class="toolbar" style="margin-top:14px"><div class="segmented">${["all","pending","overdue","paid"].map((x,i)=>`<button class="${paymentFilter===x?"active":""}" data-payment-filter="${x}">${["Todos","Pendentes","Vencidos","Pagos"][i]}</button>`).join("")}</div><div class="search-wrap"><span>⌕</span><input id="financeSearch" placeholder="Buscar lançamento"></div><input type="month" id="financeMonth"><select id="financeCategory"><option value="">Categorias</option>${state.categories.map(x=>`<option>${esc(x)}</option>`).join("")}</select><select id="financeSupplier"><option value="">Fornecedores</option>${state.suppliers.map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join("")}</select><select id="financeMethod"><option value="">Formas</option>${["PIX","Boleto","Transferência","Cartão","Dinheiro","Outro"].map(x=>`<option>${x}</option>`).join("")}</select><select id="financeTag"><option value="">Tags</option>${tagOptions("payments").map(x=>`<option>${esc(x)}</option>`).join("")}</select><button class="button secondary" data-action="manage-categories">Categorias</button><button class="button secondary" data-action="download-template">Modelo</button><button class="button secondary" data-action="import-payments">Importar</button><button class="button secondary" data-action="export-finance">Exportar</button><button class="button primary" data-action="new-payment">+ Pagamento</button></div>
   <div class="table-card"><table><thead><tr><th>Vencimento</th><th>Fornecedor</th><th>Categoria</th><th>Descrição</th><th>Valor</th><th>Tipo</th><th>Responsável</th><th>Forma</th><th>Status</th><th>Tags</th><th>Comprovante</th><th></th></tr></thead><tbody id="financeRows">${paymentTableRows(rows)}</tbody></table></div>`;
 }
@@ -355,10 +357,24 @@ function renderReports(){
   return `<div class="metric-grid">${metric("Financeiro pago",money(f.paid),`${f.contracted?(f.paid/f.contracted*100).toFixed(1):0}% contratado`)}${metric("Confirmados",g.confirmed,`${g.total?Math.round(g.confirmed/g.total*100):0}% da lista`)}${metric("Tarefas atrasadas",counts.checklist,"Requer atenção",counts.checklist?"rose":"")}${metric("Contratos pendentes",counts.contracts,"Documentos","gold")}</div><div class="content-grid"><article class="panel"><div class="panel-heading"><div><span class="eyebrow">Atenção</span><h2>Pontos prioritários</h2></div></div><div class="attention-list">${Object.entries(counts).filter(([,v])=>v).map(([k,v])=>`<button class="attention-item" data-view="${k}"><div><strong>${MODULES.find(m=>m.id===k)?.title||k}</strong><span>${v} pendência${v===1?"":"s"}</span></div><span>→</span></button>`).join("")||empty("Tudo em ordem","Nenhuma pendência crítica agora.")}</div></article><article class="panel"><div class="panel-heading"><div><span class="eyebrow">Próximas tarefas</span><h2>Agenda do casal</h2></div></div><div class="activity-list">${nextTasks.map(t=>`<div class="activity-item"><div><strong>${esc(t.title)}</strong><span>${dateBR(t.dueDate)} · ${esc(t.owner)}</span></div>${status(t.status)}</div>`).join("")}</div></article><article class="panel"><div class="panel-heading"><div><span class="eyebrow">Próximos vencimentos</span><h2>Agenda financeira</h2></div></div><div class="activity-list">${nextPay.map(p=>`<div class="activity-item"><div><strong>${esc(supplier(p.supplierId)?.name)}</strong><span>${dateBR(p.dueDate)} · ${esc(p.description)}</span></div><strong>${money(p.amount)}</strong></div>`).join("")}</div></article><article class="panel full"><div class="panel-heading"><div><span class="eyebrow">Histórico</span><h2>Alterações recentes</h2></div></div><div class="activity-list">${state.history.slice(0,12).map(h=>`<div class="activity-item"><div><strong>${esc(h.description)}</strong><span>${new Date(h.date).toLocaleString("pt-BR")} · ${esc(h.module)} · ${esc(h.action)}</span></div></div>`).join("")||empty("Sem histórico","As próximas alterações serão registradas.")}</div></article></div>`;
 }
 
-function monthData(){const year=Number((state.settings.weddingDate||TODAY()).slice(0,4));return Array.from({length:12},(_,i)=>{const key=`${year}-${String(i+1).padStart(2,"0")}`,rows=state.payments.filter(p=>p.dueDate.startsWith(key)),month=new Date(year,i,1).toLocaleDateString("pt-BR",{month:"short"}).replace(".",""),label=`${month}/${String(year).slice(-2)}`;return {label,planned:rows.reduce((a,b)=>a+Number(b.amount),0),paid:rows.filter(p=>p.paid).reduce((a,b)=>a+Number(b.amount),0)}})}
+function monthData(){
+  const keys=state.payments.map(p=>String(p.dueDate||"").slice(0,7)).filter(key=>/^\d{4}-\d{2}$/.test(key)).sort();
+  if(!keys.length)return[];
+  const [startYear,startMonth]=keys[0].split("-").map(Number),[endYear,endMonth]=keys.at(-1).split("-").map(Number),months=[];
+  for(let year=startYear,month=startMonth;year<endYear||year===endYear&&month<=endMonth;month++){if(month===13){month=1;year++}const key=`${year}-${String(month).padStart(2,"0")}`,rows=state.payments.filter(p=>String(p.dueDate||"").startsWith(key)),name=new Date(Date.UTC(year,month-1,1)).toLocaleDateString("pt-BR",{month:"short",timeZone:"UTC"}).replace(".","");months.push({key,label:`${name}/${String(year).slice(-2)}`,planned:rows.reduce((a,b)=>a+Number(b.amount),0),paid:rows.filter(p=>p.paid).reduce((a,b)=>a+Number(b.amount),0)})}
+  return months;
+}
+function renderMonthlyChart(){
+  const all=monthData(),maxStart=Math.max(0,all.length-MONTHLY_WINDOW);
+  monthlyWindowStart=Math.min(Math.max(0,monthlyWindowStart),maxStart);
+  const visible=all.slice(monthlyWindowStart,monthlyWindowStart+MONTHLY_WINDOW),chart=$('[data-chart="monthly"]'),range=$("#monthlyRange"),label=$("#monthlyRangeLabel");
+  if(chart)drawBars(chart,visible);
+  if(range){range.max=String(maxStart);range.value=String(monthlyWindowStart);range.disabled=maxStart===0}
+  if(label)label.textContent=visible.length?`${visible[0].label} — ${visible.at(-1).label}`:"Sem pagamentos";
+}
 function hydrateCharts(){
   $$("[data-chart]").forEach(el=>{
-    if(el.dataset.chart==="monthly")drawBars(el,monthData());
+    if(el.dataset.chart==="monthly")renderMonthlyChart();
     if(el.dataset.chart==="payment-status"){const data=[{label:"Pago",value:financialTotals().paid,color:COLORS[0]},{label:"Pendente",value:financialTotals().pending,color:COLORS[1]},{label:"Vencido",value:financialTotals().overdue,color:COLORS[2]}].filter(x=>x.value);drawDonut(el,data);const legend=$('[data-legend="payment-status"]');if(legend)legend.innerHTML=legendHtml(data)}
     if(el.dataset.chart==="finance-categories"){const data=state.categories.map((category,i)=>({label:category,value:state.suppliers.filter(s=>s.category===category&&!["Pesquisando","Orçado","Cancelado","Em negociação"].includes(s.status)).reduce((a,b)=>a+Number(b.total),0),color:COLORS[i%COLORS.length]})).filter(x=>x.value);drawDonut(el,data);const legend=$('[data-legend="finance-categories"]');if(legend)legend.innerHTML=legendHtml(data)}
     if(el.dataset.chart==="payment-methods"){const methods=["PIX","Boleto","Transferência","Cartão","Dinheiro","Outro"],data=methods.map(method=>({label:method,value:state.payments.filter(p=>p.method===method).reduce((a,b)=>a+Number(b.amount),0)})).filter(x=>x.value),max=Math.max(...data.map(d=>d.value),1);drawModuleBars(el,data.map(x=>({label:x.label,value:Math.round(x.value/max*100),rawValue:x.value})))}
@@ -367,7 +383,7 @@ function hydrateCharts(){
 }
 function drawDonut(el,data){if(!data.length){el.innerHTML=empty("Sem dados","Adicione registros.");return}const total=data.reduce((a,b)=>a+b.value,0),r=65,c=2*Math.PI*r;let off=0;const seg=data.map(x=>{const d=x.value/total*c,tip=`${x.label}: ${money(x.value)} (${(x.value/total*100).toFixed(1)}%)`,s=`<circle data-chart-tip="${esc(tip)}" cx="100" cy="100" r="${r}" fill="none" stroke="${x.color}" stroke-width="24" stroke-dasharray="${d} ${c-d}" stroke-dashoffset="${-off}" transform="rotate(-90 100 100)"><title>${esc(tip)}</title></circle>`;off+=d;return s}).join("");el.innerHTML=`<svg viewBox="0 0 200 200">${seg}<circle cx="100" cy="100" r="48" fill="#fffdf8"/><text x="100" y="96" text-anchor="middle" font-size="9" fill="#72776f">TOTAL</text><text x="100" y="116" text-anchor="middle" font-size="14" font-weight="700">${money(total).replace(",00","")}</text></svg>`}
 function legendHtml(data){return data.map(x=>`<div class="legend-row"><i class="legend-dot" style="background:${x.color}"></i><span>${x.label}</span><span class="legend-value">${money(x.value)}</span></div>`).join("")}
-function drawBars(el,data){const max=Math.max(...data.flatMap(x=>[x.planned,x.paid]),1),base=220,plotHeight=178,group=56,start=48;const grid=[0,.25,.5,.75,1].map(r=>{const y=base-r*plotHeight;return `<line x1="42" y1="${y}" x2="712" y2="${y}" stroke="#e9e5dc"/><text x="36" y="${y+3}" text-anchor="end" font-size="8" fill="#8b8f87">${r?Math.round(max*r/1000)+"k":"0"}</text>`}).join("");const bars=data.map((x,i)=>{const center=start+i*group,h1=x.planned/max*plotHeight,h2=x.paid/max*plotHeight,tip=`${x.label} · Previsto: ${money(x.planned)} · Pago: ${money(x.paid)}`;return `<rect x="${center}" y="${base-h1}" width="16" height="${Math.max(h1,1)}" rx="2" fill="#c7a75b"/><rect x="${center+19}" y="${base-h2}" width="16" height="${Math.max(h2,1)}" rx="2" fill="#52634b"/><rect data-chart-tip="${esc(tip)}" x="${center-8}" y="35" width="52" height="${base-35}" fill="transparent" pointer-events="all"><title>${esc(tip)}</title></rect><text x="${center+17}" y="243" text-anchor="middle" font-size="8" fill="#72776f">${x.label}</text>`}).join("");el.innerHTML=`<svg viewBox="0 0 730 255" preserveAspectRatio="xMidYMid meet">${grid}${bars}</svg>`}
+function drawBars(el,data){if(!data.length){el.innerHTML=empty("Sem pagamentos","Cadastre vencimentos para visualizar a evolução.");return}const max=Math.max(...data.flatMap(x=>[x.planned,x.paid]),1),base=220,plotHeight=178,plotStart=48,plotWidth=650,group=plotWidth/Math.max(data.length,1),barWidth=Math.min(18,group*.28);const grid=[0,.25,.5,.75,1].map(r=>{const y=base-r*plotHeight;return `<line x1="42" y1="${y}" x2="712" y2="${y}" stroke="#e9e5dc"/><text x="36" y="${y+3}" text-anchor="end" font-size="8" fill="#8b8f87">${r?Math.round(max*r/1000)+"k":"0"}</text>`}).join("");const bars=data.map((x,i)=>{const center=plotStart+i*group+group/2,h1=x.planned/max*plotHeight,h2=x.paid/max*plotHeight,left=center-barWidth-2;return `<rect x="${left}" y="${base-h1}" width="${barWidth}" height="${Math.max(h1,1)}" rx="2" fill="#c7a75b"/><rect x="${center+2}" y="${base-h2}" width="${barWidth}" height="${Math.max(h2,1)}" rx="2" fill="#52634b"/><rect data-chart-tip="${esc(x.label)}" data-tip-kind="monthly" data-tip-label="${esc(x.label)}" data-tip-planned="${esc(money(x.planned))}" data-tip-paid="${esc(money(x.paid))}" x="${center-group/2}" y="30" width="${group}" height="${base-30}" fill="transparent" pointer-events="all"><title>${esc(x.label)}</title></rect><text x="${center}" y="243" text-anchor="middle" font-size="8" fill="#72776f">${x.label}</text>`}).join("");el.innerHTML=`<svg viewBox="0 0 730 255" preserveAspectRatio="xMidYMid meet">${grid}${bars}</svg>`}
 function drawModuleBars(el,data){const max=Math.max(...data.map(x=>x.value),1),rowHeight=Math.min(43,240/Math.max(data.length,1));el.innerHTML=`<svg viewBox="0 0 700 260" preserveAspectRatio="xMidYMid meet">${data.map((x,i)=>{const y=18+i*rowHeight,w=x.value/max*500,display=x.rawValue!=null?money(x.rawValue):`${x.value}%`,tip=`${x.label}: ${display}`;return `<text x="8" y="${y+12}" font-size="10" fill="#5d625b">${x.label}</text><rect x="125" y="${y}" width="500" height="16" rx="3" fill="#ece8df"/><rect data-chart-tip="${esc(tip)}" x="125" y="${y}" width="${Math.max(w,1)}" height="16" rx="3" fill="#92a386"><title>${esc(tip)}</title></rect><text x="640" y="${y+12}" font-size="9" fill="#52634b">${display}</text>`}).join("")}</svg>`}
 
 const FORMS = {
@@ -548,6 +564,7 @@ document.addEventListener("click",async event=>{
   const dc=event.target.closest("[data-delete-category]");if(dc&&!dc.disabled){state.categories=state.categories.filter(x=>x!==dc.dataset.deleteCategory);save("Categoria removida.");renderCategories()}
 });
 document.addEventListener("input",event=>{
+  if(event.target.id==="monthlyRange"){monthlyWindowStart=Number(event.target.value)||0;renderMonthlyChart()}
   if(["financeSearch","financeMonth","financeCategory","financeSupplier","financeMethod","financeTag"].includes(event.target.id)){const body=$("#financeRows");if(body)body.innerHTML=paymentTableRows(financeRows())}
   if(["supplierSearch","supplierCategory","supplierStatus","supplierContract","supplierMin","supplierTag"].includes(event.target.id)){const target=$("#supplierContent");if(target)target.innerHTML=supplierContent()}
   if(["guestSearch","guestSide","guestStatus","guestType","guestTag"].includes(event.target.id)){const target=$("#guestContent");if(target)target.innerHTML=guestTable()}
@@ -561,18 +578,32 @@ document.addEventListener("mouseover",event=>{
   const target=event.target.closest?.("[data-chart-tip]");
   if(!target)return;
   const tooltip=$("#chartTooltip");
-  tooltip.textContent=target.dataset.chartTip;
+  if(target.dataset.tipKind==="monthly"){
+    tooltip.classList.add("monthly-tooltip");
+    tooltip.innerHTML=`<strong>${esc(target.dataset.tipLabel)}</strong><span><i style="background:#c7a75b"></i><b>Previsto</b><em>${esc(target.dataset.tipPlanned)}</em></span><span><i style="background:#52634b"></i><b>Pago</b><em>${esc(target.dataset.tipPaid)}</em></span>`;
+  }else{
+    tooltip.classList.remove("monthly-tooltip");
+    tooltip.textContent=target.dataset.chartTip;
+  }
   tooltip.classList.add("show");
 });
 document.addEventListener("mousemove",event=>{
   const tooltip=$("#chartTooltip");
   if(!tooltip.classList.contains("show"))return;
-  tooltip.style.left=`${event.clientX}px`;
-  tooltip.style.top=`${event.clientY-10}px`;
+  const width=tooltip.offsetWidth||170,left=Math.min(window.innerWidth-width/2-10,Math.max(width/2+10,event.clientX)),above=event.clientY>tooltip.offsetHeight+24;
+  tooltip.style.left=`${left}px`;
+  tooltip.style.top=`${above?event.clientY-12:event.clientY+12}px`;
+  tooltip.classList.toggle("below",!above);
 });
 document.addEventListener("mouseout",event=>{
   if(!event.target.closest?.("[data-chart-tip]"))return;
   $("#chartTooltip").classList.remove("show");
+});
+document.addEventListener("click",event=>{
+  const step=event.target.closest("[data-month-step]");if(!step)return;
+  const maxStart=Math.max(0,monthData().length-MONTHLY_WINDOW);
+  monthlyWindowStart=Math.min(maxStart,Math.max(0,monthlyWindowStart+Number(step.dataset.monthStep)));
+  renderMonthlyChart();
 });
 $("#entityForm").addEventListener("submit",async event=>{event.preventDefault();try{await submitEntity(event.currentTarget)}catch(error){toast(error.message||"Não foi possível salvar o registro.")}});
 $("#categoryForm").addEventListener("submit",event=>{event.preventDefault();const value=event.currentTarget.elements.category.value.trim();if(!value)return;if(state.categories.some(x=>normalize(x)===normalize(value))){toast("Categoria já existe.");return}state.categories.push(value);event.currentTarget.reset();save("Categoria adicionada.");renderCategories()});
