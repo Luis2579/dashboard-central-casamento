@@ -98,6 +98,8 @@ const MODULES = [
   {id:"reports",section:"Executivo",icon:"↗",title:"Relatórios gerais",description:"Visão consolidada e pontos de atenção."}
 ];
 
+let cloudInitialized = false;
+let lastMigrationRemovedDemo = false;
 let state = migrateState(loadRawState());
 let currentView = "home";
 let currentEntity = null;
@@ -111,8 +113,6 @@ let pendingImport = [];
 let pendingImportType = "payments";
 let pendingModuleImport = "";
 let cloudSaveTimer = null;
-let cloudInitialized = false;
-let lastMigrationRemovedDemo = false;
 
 function loadRawState(){try{return JSON.parse(localStorage.getItem(STORAGE_KEY))||structuredClone(sampleData)}catch{return structuredClone(sampleData)}}
 function demoValue(value){return normalize(value).replace(/\s+/g," ")}
