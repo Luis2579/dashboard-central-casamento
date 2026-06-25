@@ -111,8 +111,40 @@ let pendingImport = [];
 let pendingImportType = "payments";
 let pendingModuleImport = "";
 let cloudSaveTimer = null;
+let cloudInitialized = false;
+let lastMigrationRemovedDemo = false;
 
 function loadRawState(){try{return JSON.parse(localStorage.getItem(STORAGE_KEY))||structuredClone(sampleData)}catch{return structuredClone(sampleData)}}
+function demoValue(value){return normalize(value).replace(/\s+/g," ")}
+function sameDemoText(a,b){return demoValue(a)===demoValue(b)}
+function sameDemoNumber(a,b){return Number(a||0)===Number(b||0)}
+function isSampleRecord(key,row){
+  const demos=sampleData[key]||[];
+  if(["contracts","decor"].includes(key)&&(row.documentPath||row.documentUrl||row.documentName))return false;
+  return demos.some(demo=>{
+    if(key==="suppliers")return sameDemoText(row.name,demo.name)&&sameDemoText(row.service,demo.service)&&sameDemoNumber(row.total,demo.total);
+    if(key==="payments")return sameDemoText(row.description,demo.description)&&row.dueDate===demo.dueDate&&sameDemoNumber(row.amount,demo.amount);
+    if(key==="guests")return sameDemoText(row.name,demo.name)&&sameDemoText(row.group,demo.group)&&sameDemoText(row.phone,demo.phone);
+    if(key==="tasks")return sameDemoText(row.title,demo.title)&&row.dueDate===demo.dueDate&&sameDemoText(row.category,demo.category);
+    if(key==="contracts")return sameDemoText(row.name,demo.name)&&sameDemoText(row.type,demo.type)&&row.date===demo.date;
+    if(key==="timeline")return sameDemoText(row.activity,demo.activity)&&row.date===demo.date&&sameDemoText(row.time,demo.time);
+    if(key==="buffet")return sameDemoText(row.item,demo.item)&&sameDemoText(row.kind,demo.kind)&&sameDemoNumber(row.cost,demo.cost);
+    if(key==="decor")return sameDemoText(row.area,demo.area)&&sameDemoText(row.item,demo.item)&&sameDemoText(row.palette,demo.palette);
+    if(key==="gifts")return sameDemoText(row.name,demo.name)&&sameDemoText(row.guest,demo.guest);
+    if(key==="plans")return sameDemoText(row.module,demo.module)&&sameDemoText(row.title,demo.title)&&row.date===demo.date;
+    if(key==="tables")return sameDemoText(row.name,demo.name)&&sameDemoNumber(row.capacity,demo.capacity)&&sameDemoText(row.notes,demo.notes);
+    return false;
+  });
+}
+function removeSampleRecords(next){
+  lastMigrationRemovedDemo = false;
+  for(const key of ["suppliers","payments","guests","tasks","contracts","timeline","buffet","decor","gifts","plans","tables"]){
+    if(!Array.isArray(next[key]))continue;
+    const before=next[key].length;
+    next[key]=next[key].filter(row=>!isSampleRecord(key,row));
+    if(next[key].length!==before)lastMigrationRemovedDemo=true;
+  }
+}
 function migrateState(raw){
   const next = raw || {};
   const previousVersion = Number(next.version || 1);
@@ -134,6 +166,7 @@ function migrateState(raw){
   next.timeline=enrich(next.timeline,{priority:"Média",attachment:""});
   next.decor=enrich(next.decor,{priority:"Média",attachment:"",documentPath:"",documentUrl:"",documentName:""});
   next.tables=enrich(next.tables,{capacity:8,notes:""});
+  removeSampleRecords(next);
   next.settings.guestTarget ||= Math.max(next.guests.length,180);
   localStorage.setItem(STORAGE_KEY,JSON.stringify(next));
   return next;
@@ -146,7 +179,7 @@ function documentHref(url){
   return new URL(url.replace(/^\/+/,""),"http://127.0.0.1:4173/").href;
 }
 function addHistory(module,action,description){state.history.unshift({id:uid("h"),date:new Date().toISOString(),module,action,description});state.history=state.history.slice(0,500)}
-function scheduleCloudSave(){if(!window.CloudStore?.configured)return;clearTimeout(cloudSaveTimer);cloudSaveTimer=setTimeout(()=>window.CloudStore.save(state).catch(error=>toast(`Sincronização pendente: ${error.message}`)),700)}
+function scheduleCloudSave(){if(!cloudInitialized||!window.CloudStore?.configured)return;clearTimeout(cloudSaveTimer);cloudSaveTimer=setTimeout(()=>window.CloudStore.save(state).catch(error=>toast(`Sincronização pendente: ${error.message}`)),700)}
 function save(message,module="Sistema",action="Atualização"){if(message)addHistory(module,action,message);localStorage.setItem(STORAGE_KEY,JSON.stringify(state));scheduleCloudSave();render();if(message)toast(message)}
 function supplier(id){return state.suppliers.find(item=>item.id===id)}
 function daysUntil(date){return Math.ceil((new Date(`${date}T12:00:00`)-new Date())/86400000)}
@@ -467,8 +500,7 @@ function openForm(entity,id="",prefill={}){
   $("#entityDialog").showModal();
 }
 async function uploadDocument(file){
-  const cloudSession=await window.CloudStore?.session?.();
-  if(cloudSession){
+  if(window.CloudStore?.configured){
     const uploaded=await window.CloudStore.upload(file);
     return {path:uploaded.path,name:uploaded.name,url:""};
   }
@@ -686,14 +718,23 @@ function updateAccount(session){
   label.textContent=session?"Online compartilhado":"Conectando...";
 }
 async function initializeCloud(){
-  if(!window.CloudStore?.configured){updateAccount(null);return}
+  if(!window.CloudStore?.configured){cloudInitialized=true;updateAccount(null);return}
   try{
     const session=await window.CloudStore.ensureSession();updateAccount(session);
     const remote=await window.CloudStore.load();
-    if(remote){mergeBackup(remote);localStorage.setItem(STORAGE_KEY,JSON.stringify(state));render()}
-    await window.CloudStore.save(state);
-    window.CloudStore.subscribe(remoteState=>{if(!remoteState)return;state=migrateState(remoteState);localStorage.setItem(STORAGE_KEY,JSON.stringify(state));render()});
-  }catch(error){toast(`Nuvem indisponível: ${error.message}`)}
+    let shouldSave=false;
+    if(remote){
+      state=migrateState(remote);
+      shouldSave=lastMigrationRemovedDemo;
+      render();
+    }else{
+      state=migrateState(state);
+      shouldSave=true;
+    }
+    cloudInitialized=true;
+    if(shouldSave)await window.CloudStore.save(state);
+    window.CloudStore.subscribe(remoteState=>{if(!remoteState)return;state=migrateState(remoteState);const cleaned=lastMigrationRemovedDemo;localStorage.setItem(STORAGE_KEY,JSON.stringify(state));render();if(cleaned)window.CloudStore.save(state).catch(error=>toast(`Sincronização pendente: ${error.message}`))});
+  }catch(error){cloudInitialized=true;toast(`Nuvem indisponível: ${error.message}`)}
 }
 $("#authForm").addEventListener("submit",async event=>{event.preventDefault();const data=new FormData(event.currentTarget),message=$("#authMessage");try{message.hidden=true;await window.CloudStore.signIn(data.get("email"),data.get("password"));$("#authDialog").close();event.currentTarget.reset();toast("Login realizado. Sincronizando dados...")}catch(error){message.textContent=error.message;message.hidden=false}});
 $("#signUpButton").addEventListener("click",async()=>{const form=$("#authForm"),data=new FormData(form),message=$("#authMessage");try{if(!data.get("email")||!data.get("password"))throw new Error("Informe e-mail e senha para criar a conta.");await window.CloudStore.signUp(data.get("email"),data.get("password"));message.textContent="Conta criada. Verifique seu e-mail para confirmar o acesso.";message.hidden=false}catch(error){message.textContent=error.message;message.hidden=false}});
