@@ -73,6 +73,24 @@
     </form>
   </dialog>
 
+  <dialog id="budgetDialog">
+    <form id="budgetForm" class="dialog-form budget-form">
+      <div class="dialog-heading">
+        <div><span class="eyebrow">Planejamento financeiro</span><h2>Orçamento do casamento</h2></div>
+        <button type="button" class="close-button" data-close-dialog="budgetDialog">×</button>
+      </div>
+      <label class="budget-field">
+        <span>Valor planejado</span>
+        <div class="currency-input"><span>R$</span><input id="budgetInput" name="budget" type="number" min="0" step="0.01" required inputmode="decimal"></div>
+      </label>
+      <p class="budget-help">Este valor atualiza os percentuais e indicadores financeiros do dashboard para todos os usuários.</p>
+      <div class="dialog-actions">
+        <button type="button" class="button secondary" data-close-dialog="budgetDialog">Cancelar</button>
+        <button type="submit" class="button primary">Salvar orçamento</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="categoryDialog">
     <div class="dialog-form">
       <div class="dialog-heading">
